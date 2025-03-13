@@ -4,6 +4,8 @@ require 'vendor/autoload.php';
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Promise\Utils;
+use GuzzleHttp\Pool;
+use GuzzleHttp\Psr7\Request;
 
 class ZendeskAPI
 {
@@ -21,8 +23,8 @@ class ZendeskAPI
         $this->client = new Client([
             'base_uri' => "https://$subdomain.zendesk.com/api/v2/",
             'auth' => ["$email/token", $apiToken],
-            'timeout' => 10,
-            'connect_timeout' => 2,
+            'timeout' => 30,
+            'connect_timeout' => 5,
         ]);
     }
 
@@ -64,24 +66,29 @@ class TicketCSVExporter
 
     public function writeTicket($ticket, $comments, $agent, $contact)
     {
+        $commentsText = '';
+        if (is_array($comments)) {
+            $commentsText = implode('; ', array_map(function ($comment) {
+                return $comment['body'] ?? '';
+            }, $comments));
+        }
+
         $data = [
-            $ticket['id'],
-            $ticket['description'],
-            $ticket['status'],
-            $ticket['priority'],
-            $agent ? $agent['id'] : '',
-            $agent ? $agent['name'] : '',
-            $agent ? $agent['email'] : '',
-            $contact ? $contact['id'] : '',
-            $contact ? $contact['name'] : '',
-            $contact ? $contact['email'] : '',
-            $ticket['group_id'],
-            $ticket['group_name'],
-            $ticket['company_id'],
-            $ticket['company_name'],
-            implode('; ', array_map(function ($comment) {
-                return $comment['body'];
-            }, $comments))
+            $ticket['id'] ?? '',
+            $ticket['description'] ?? '',
+            $ticket['status'] ?? '',
+            $ticket['priority'] ?? '',
+            $agent['id'] ?? '',
+            $agent['name'] ?? '',
+            $agent['email'] ?? '',
+            $contact['id'] ?? '',
+            $contact['name'] ?? '',
+            $contact['email'] ?? '',
+            $ticket['group_id'] ?? '',
+            $ticket['group_name'] ?? '',
+            $ticket['company_id'] ?? '',
+            $ticket['company_name'] ?? '',
+            $commentsText
         ];
 
         fputcsv($this->file, $data);
@@ -100,51 +107,60 @@ $apiToken = 'WaKtJRW7b0cNYdL5zRl26ggLdXsFR4fz6RVnRoLs';
 $zendesk = new ZendeskAPI($subdomain, $email, $apiToken);
 $csvExporter = new TicketCSVExporter('tickets.csv');
 
-// Start time
 $startTime = microtime(true);
-
 $csvExporter->writeHeaders();
 
 $page = 1;
 do {
     $tickets = $zendesk->getTickets($page);
-    $promises = [];
-//асинхронки
-    foreach ($tickets as $ticket) {
+    if (empty($tickets)) break;
 
-        $commentsPromise = $zendesk->getClient()->getAsync("tickets/{$ticket['id']}/comments.json")
-            ->then(function ($response) use ($ticket) {
-                return json_decode($response->getBody()->getContents(), true)['comments'];
-            });
+    $requests = function ($tickets) use ($zendesk) {
+        foreach ($tickets as $ticket) {
+            yield function () use ($zendesk, $ticket) {
+                return $zendesk->getClient()->getAsync("tickets/{$ticket['id']}/comments.json");
+            };
+            yield function () use ($zendesk, $ticket) {
+                return $zendesk->getClient()->getAsync("users/{$ticket['assignee_id']}.json");
+            };
+            yield function () use ($zendesk, $ticket) {
+                return $zendesk->getClient()->getAsync("users/{$ticket['requester_id']}.json");
+            };
+        }
+    };
 
+    $results = [];
+    $pool = new Pool($zendesk->getClient(), $requests($tickets), [
+        'concurrency' => 50,
+        'fulfilled' => function ($response, $index) use (&$results, $tickets) {
+            $ticketIndex = intdiv($index, 3);
+            $type = $index % 3;
 
-        $agentPromise = $zendesk->getClient()->getAsync("users/{$ticket['assignee_id']}.json")
-            ->then(function ($response) {
-                return json_decode($response->getBody()->getContents(), true)['user'];
-            });
+            if ($type === 0) {
+                $results[$ticketIndex]['comments'] = json_decode($response->getBody()->getContents(), true)['comments'] ?? [];
+            } elseif ($type === 1) {
+                $results[$ticketIndex]['agent'] = json_decode($response->getBody()->getContents(), true)['user'] ?? [];
+            } elseif ($type === 2) {
+                $results[$ticketIndex]['contact'] = json_decode($response->getBody()->getContents(), true)['user'] ?? [];
+            }
+        },
+        'rejected' => function ($reason, $index) {
+            echo "Request failed: " . $reason->getMessage() . "\n";
+        },
+    ]);
 
-        $contactPromise = $zendesk->getClient()->getAsync("users/{$ticket['requester_id']}.json")
-            ->then(function ($response) {
-                return json_decode($response->getBody()->getContents(), true)['user'];
-            });
+    $pool->promise()->wait();
 
-        $promises[] = Utils::all([$commentsPromise, $agentPromise, $contactPromise])
-            ->then(function ($results) use ($ticket, $csvExporter) {
-                list($comments, $agent, $contact) = $results;
-                $csvExporter->writeTicket($ticket, $comments, $agent, $contact);
-            });
+    foreach ($tickets as $index => $ticket) {
+        $csvExporter->writeTicket($ticket, $results[$index]['comments'] ?? [], $results[$index]['agent'] ?? [], $results[$index]['contact'] ?? []);
     }
 
-    Utils::settle($promises)->wait();
-
     $page++;
-} while (count($tickets) > 0);
+} while (true);
 
 $csvExporter->close();
 
-// End time
 $endTime = microtime(true);
-
 $executionTime = $endTime - $startTime;
 echo "Tickets have been exported to 'tickets.csv'.\n";
 echo "Execution time: " . number_format($executionTime, 4) . " seconds.\n";

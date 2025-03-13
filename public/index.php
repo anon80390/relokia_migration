@@ -20,7 +20,9 @@ class ZendeskAPI
 
         $this->client = new Client([
             'base_uri' => "https://$subdomain.zendesk.com/api/v2/",
-            'auth' => ["$email/token", $apiToken]
+            'auth' => ["$email/token", $apiToken],
+            'timeout' => 10,
+            'connect_timeout' => 2,
         ]);
     }
 
@@ -38,30 +40,6 @@ class ZendeskAPI
         } catch (\Exception $e) {
             echo "Error fetching tickets: " . $e->getMessage();
             return [];
-        }
-    }
-
-    public function getTicketComments($ticketId)
-    {
-        try {
-            $response = $this->client->get("tickets/$ticketId/comments.json");
-            $data = json_decode($response->getBody()->getContents(), true);
-            return $data['comments'];
-        } catch (\Exception $e) {
-            echo "Error fetching comments for ticket $ticketId: " . $e->getMessage();
-            return [];
-        }
-    }
-
-    public function getUserInfo($userId)
-    {
-        try {
-            $response = $this->client->get("users/$userId.json");
-            $data = json_decode($response->getBody()->getContents(), true);
-            return $data['user'];
-        } catch (\Exception $e) {
-            echo "Error fetching user info for ID $userId: " . $e->getMessage();
-            return null;
         }
     }
 }
@@ -115,9 +93,9 @@ class TicketCSVExporter
     }
 }
 
-$subdomain = 'relokia9386'; // Replace with your Zendesk subdomain
-$email = 'anon80390@gmail.com'; // Your email
-$apiToken = 'WaKtJRW7b0cNYdL5zRl26ggLdXsFR4fz6RVnRoLs'; // Your API token
+$subdomain = 'relokia9386';
+$email = 'anon80390@gmail.com';
+$apiToken = 'WaKtJRW7b0cNYdL5zRl26ggLdXsFR4fz6RVnRoLs';
 
 $zendesk = new ZendeskAPI($subdomain, $email, $apiToken);
 $csvExporter = new TicketCSVExporter('tickets.csv');
@@ -125,22 +103,21 @@ $csvExporter = new TicketCSVExporter('tickets.csv');
 // Start time
 $startTime = microtime(true);
 
-// Write headers to CSV
 $csvExporter->writeHeaders();
 
 $page = 1;
 do {
     $tickets = $zendesk->getTickets($page);
     $promises = [];
-
+//асинхронки
     foreach ($tickets as $ticket) {
-        // Асинхронный запрос для комментариев
+
         $commentsPromise = $zendesk->getClient()->getAsync("tickets/{$ticket['id']}/comments.json")
             ->then(function ($response) use ($ticket) {
                 return json_decode($response->getBody()->getContents(), true)['comments'];
             });
 
-        // Асинхронные запросы для информации о пользователях (агент и контакт)
+
         $agentPromise = $zendesk->getClient()->getAsync("users/{$ticket['assignee_id']}.json")
             ->then(function ($response) {
                 return json_decode($response->getBody()->getContents(), true)['user'];
@@ -151,7 +128,6 @@ do {
                 return json_decode($response->getBody()->getContents(), true)['user'];
             });
 
-        // Ожидание всех запросов для текущего тикета
         $promises[] = Utils::all([$commentsPromise, $agentPromise, $contactPromise])
             ->then(function ($results) use ($ticket, $csvExporter) {
                 list($comments, $agent, $contact) = $results;
@@ -159,18 +135,16 @@ do {
             });
     }
 
-    // Ожидание всех промисов для текущей страницы
     Utils::settle($promises)->wait();
 
     $page++;
-} while (count($tickets) > 0); // Продолжать, пока есть тикеты
+} while (count($tickets) > 0);
 
 $csvExporter->close();
 
 // End time
 $endTime = microtime(true);
 
-// Calculate and display execution time
 $executionTime = $endTime - $startTime;
 echo "Tickets have been exported to 'tickets.csv'.\n";
 echo "Execution time: " . number_format($executionTime, 4) . " seconds.\n";

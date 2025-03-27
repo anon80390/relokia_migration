@@ -17,13 +17,49 @@ foreach ($zendeskTickets as $ticket) {
     $priority = $zendesk->mapPriority($ticket);
     $status = $zendesk->mapStatus($ticket);
 
-    $ticketId = $freshdesk->crateTicket($ticket['description'], $ticket['subject'], $ticket['requester']['user']['email'],
-        $priority, $status, $ticket['cc_email'] ?? []);
+foreach ($ticket['custom_fields'] as $field) {
+    $zendeskFields[] = $zendesk->fieldInfo($field['id'])['ticket_field']; //zendesk fields with title & type
+}
+    $freshdeskFields = $freshdesk->fieldInfo(); // all fields freshdesk
+
+    foreach ($freshdeskFields as $freshdeskField) { //label=Topic name=cf_topic type=custom_dropdown
+
+     foreach ($zendeskFields as $zendeskField) { //title=Topic type=target id=25594841813138
+         if($freshdeskField['label'] == $zendeskField['title']) {
+             foreach ($ticket['fields'] as $ticketZendeskField) {
+                 if($ticketZendeskField['id'] == $zendeskField['id']) {
+
+                     $custom_fields = [
+                         $freshdeskField['name'] => $ticketZendeskField['value'] ,
+                     ];
+                     $ticketId = $freshdesk->crateTicket($ticket['description'], $ticket['subject'], $ticket['requester']['user']['email'],
+                         $priority, $status, $ticket['cc_email'] ?? [], $custom_fields);
+
+                 }
+             }
+         }
+
+     }
+    }
+
+
+
+//    $fields = $zendesk->fieldInfo()
+
+
+
+//    $custom_fields = [
+//      'cf_topic' => 'Delivery'
+//    ];
+//    $ticketId = $freshdesk->crateTicket($ticket['description'], $ticket['subject'], $ticket['requester']['user']['email'],
+//        $priority, $status, $ticket['cc_email'] ?? [], $custom_fields);
+
+
 
 
     foreach ($ticket['comments']['comments'] as $comment) {
 
-        $freshdesk->setReply($ticketId, $comment['body']);
+        $freshdesk->setReply($ticketId['id'], $comment['body']);
 
     }
 

@@ -47,6 +47,7 @@ class Zendesk
                 $ticket['comments'] = $commentsData;
                 $ticket['assignee'] = $assigneeData;
                 $ticket['requester'] = $requesterData;
+
             }
 
             return $data['tickets'];
@@ -55,6 +56,21 @@ class Zendesk
             echo "Error fetching tickets: " . $e->getMessage();
             return [];
         }
+    }
+
+    public function fieldInfo($fieldId)
+    {
+
+        $response = $this->client->get("ticket_fields/$fieldId.json");
+        $data = json_decode($response->getBody()->getContents(), true);
+//        $response = [
+//            "type" => $data['ticket_field']['type'],
+//            "title" => $data['ticket_field']['title'],
+//
+//        ];
+//
+//        return $response;
+        return $data;
     }
 
     public function mapPriority($ticket)

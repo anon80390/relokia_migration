@@ -51,8 +51,8 @@ class Freshdesk
         ]);
 
     }
-    public function crateTicket(string $description, string $subject, string $email, int $priority, int $status,
-                                array $cc_emails = [])
+    public function crateTicket(string $description, string $subject,
+                                string $email, int $priority, int $status, array $cc_emails, array $custom_fields)
     {
 
         $response =  $this->client->request('POST', "tickets/", [
@@ -67,12 +67,52 @@ class Freshdesk
                 "priority" => $priority,
                 "status" => $status,
                 "cc_emails" => $cc_emails,
+                "custom_fields" => $custom_fields
 
             ]
         ]);
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['id'];
+        return [
+            "id" => $data['id'],
+            "custom_fields" => $data['custom_fields'],
+        ];
 
 
+
+    }
+
+    public function fieldInfo(){
+
+        $response = $this->client->request('GET', "ticket_fields", [
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'Authorization' =>  "Basic " . base64_encode("$this->token:X"),
+            ],
+
+        ]);
+
+        $data = json_decode($response->getBody()->getContents(), true);
+
+//        return [
+//            "title" => $data['label'],
+//            "type" => $data['type'],
+//        ];
+        return $data;
+    }
+    public function updateFieldVal(int $ticketId, string $fieldName, string $value){
+        $response = $this->client->request('PUT', "tickets/$ticketId", [
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'Authorization' =>  "Basic " . base64_encode("$this->token:X"),
+            ],
+            "json" => [
+                "custom_fields" => [
+                    $fieldName => $value
+                ]
+            ]
+
+        ]);
+
+        $data = json_decode($response->getBody()->getContents(), true);
     }
 }

@@ -1,13 +1,12 @@
 <?php
 
-
 include __DIR__ . '/vendor/autoload.php';
 
-
+use API\Tickets;
 use GuzzleHttp\Client;
-
+use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Pool;
-
+use GuzzleHttp\Psr7\Request;
 
 class ZendeskAPI
 {
@@ -48,11 +47,69 @@ class ZendeskAPI
     }
 }
 
+class TicketCSVExporter
+{
+    private $file;
+
+    public function __construct($filename)
+    {
+        $this->file = fopen($filename, 'w');
+    }
+
+    public function writeHeaders()
+    {
+        $headers = [
+            'Ticket ID', 'Description', 'Status', 'Priority', 'Agent ID', 'Agent Name', 'Agent Email',
+            'Contact ID', 'Contact Name', 'Contact Email', 'Group ID', 'Group Name', 'Company ID', 'Company Name', 'Comments'
+        ];
+        fputcsv($this->file, $headers);
+    }
+
+    public function writeTicket($ticket, $comments, $agent, $contact)
+    {
+        $commentsText = '';
+        if (is_array($comments)) {
+            $commentsText = implode('; ', array_map(function ($comment) {
+                return $comment['body'] ?? '';
+            }, $comments));
+        }
+
+        $data = [
+            $ticket['id'] ?? '',
+            $ticket['description'] ?? '',
+            $ticket['status'] ?? '',
+            $ticket['priority'] ?? '',
+            $agent['id'] ?? '',
+            $agent['name'] ?? '',
+            $agent['email'] ?? '',
+            $contact['id'] ?? '',
+            $contact['name'] ?? '',
+            $contact['email'] ?? '',
+            $ticket['group_id'] ?? '',
+            $ticket['group_name'] ?? '',
+            $ticket['company_id'] ?? '',
+            $ticket['company_name'] ?? '',
+            $commentsText
+        ];
+
+        fputcsv($this->file, $data);
+    }
+
+    public function close()
+    {
+        fclose($this->file);
+    }
+}
+
 $subdomain = 'relokia1396';
 $email = 'v.tylnyi@relokia.com';
 $apiToken = 'AD8iVJSZK0e7SYeJm743OPoWXfvyIoI5opEhQLUK';
 
 $zendesk = new ZendeskAPI($subdomain, $email, $apiToken);
+$csvExporter = new TicketCSVExporter('tickets.csv');
+
+$startTime = microtime(true);
+$csvExporter->writeHeaders();
 
 $page = 1;
 do {
@@ -73,19 +130,19 @@ do {
         }
     };
 
-    $zendeskRes = [];
+    $results = [];
     $pool = new Pool($zendesk->getClient(), $requests($tickets), [
         'concurrency' => 50,
-        'fulfilled' => function ($response, $index) use (&$zendeskRes, $tickets) {
+        'fulfilled' => function ($response, $index) use (&$results, $tickets) {
             $ticketIndex = intdiv($index, 3);
             $type = $index % 3;
 
             if ($type === 0) {
-                $zendeskRes[$ticketIndex]['comments'] = json_decode($response->getBody()->getContents(), true)['comments'] ?? [];
+                $results[$ticketIndex]['comments'] = json_decode($response->getBody()->getContents(), true)['comments'] ?? [];
             } elseif ($type === 1) {
-                $zendeskRes[$ticketIndex]['agent'] = json_decode($response->getBody()->getContents(), true)['user'] ?? [];
+                $results[$ticketIndex]['agent'] = json_decode($response->getBody()->getContents(), true)['user'] ?? [];
             } elseif ($type === 2) {
-                $zendeskRes[$ticketIndex]['contact'] = json_decode($response->getBody()->getContents(), true)['user'] ?? [];
+                $results[$ticketIndex]['contact'] = json_decode($response->getBody()->getContents(), true)['user'] ?? [];
             }
         },
         'rejected' => function ($reason, $index) {
@@ -95,7 +152,20 @@ do {
 
     $pool->promise()->wait();
 
+    foreach ($tickets as $index => $ticket) {
+        $csvExporter->writeTicket($ticket, $results[$index]['comments'] ?? [], $results[$index]['agent'] ?? [], $results[$index]['contact'] ?? []);
+    }
+
     $page++;
 } while (true);
-print_r($zendeskRes);
-echo "ok";
+
+$csvExporter->close();
+
+$endTime = microtime(true);
+$executionTime = $endTime - $startTime;
+echo "Tickets have been exported to 'tickets.csv'.\n";
+echo "Execution time: " . number_format($executionTime, 4) . " seconds.\n";
+
+
+//$test = new Tickets();
+//$result = $test->test();

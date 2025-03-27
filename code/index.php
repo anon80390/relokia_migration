@@ -101,9 +101,9 @@ class TicketCSVExporter
     }
 }
 
-$subdomain = 'relokia9386';
-$email = 'anon80390@gmail.com';
-$apiToken = 'WaKtJRW7b0cNYdL5zRl26ggLdXsFR4fz6RVnRoLs';
+$subdomain = 'relokia1396';
+$email = 'v.tylnyi@relokia.com';
+$apiToken = 'AD8iVJSZK0e7SYeJm743OPoWXfvyIoI5opEhQLUK';
 
 $zendesk = new ZendeskAPI($subdomain, $email, $apiToken);
 $csvExporter = new TicketCSVExporter('tickets.csv');

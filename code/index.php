@@ -29,11 +29,25 @@ foreach ($ticket['custom_fields'] as $field) {
              foreach ($ticket['fields'] as $ticketZendeskField) {
                  if($ticketZendeskField['id'] == $zendeskField['id']) {
 
+                     if(gettype($ticketZendeskField['value']) == 'string') {
+                         $ticketZendeskField['value'] = ucfirst($ticketZendeskField['value']);
+                     }
+
                      $custom_fields = [
                          $freshdeskField['name'] => $ticketZendeskField['value'] ,
                      ];
-                     $ticketId = $freshdesk->crateTicket($ticket['description'], $ticket['subject'], $ticket['requester']['user']['email'],
-                         $priority, $status, $ticket['cc_email'] ?? [], $custom_fields);
+
+                     $ticketData = [
+                         "description" => $ticket['description'],
+                         "subject" => $ticket['subject'],
+                         "email" => $ticket['requester']['user']['email'],
+                         "priority" => $priority,
+                         "status" => $status,
+                         "cc_emails" => isset($ticket['cc_email']) ? $ticket['cc_email'] : [],
+                         "custom_fields" => $custom_fields
+
+                     ];
+                     $ticketId = $freshdesk->crateTicket($ticketData);
 
                  }
              }

@@ -51,8 +51,7 @@ class Freshdesk
         ]);
 
     }
-    public function crateTicket(string $description, string $subject,
-                                string $email, int $priority, int $status, array $cc_emails, array $custom_fields)
+    public function crateTicket(array $ticketData)
     {
 
         $response =  $this->client->request('POST', "tickets/", [
@@ -60,16 +59,7 @@ class Freshdesk
                 'Content-Type' => 'application/json',
                 'Authorization' =>  "Basic " . base64_encode("$this->token:X"),
             ],
-            'json' => [
-                "description" => $description,
-                "subject" => $subject,
-                "email" => $email,
-                "priority" => $priority,
-                "status" => $status,
-                "cc_emails" => $cc_emails,
-                "custom_fields" => $custom_fields
-
-            ]
+            'json' => $ticketData
         ]);
         $data = json_decode($response->getBody()->getContents(), true);
         return [

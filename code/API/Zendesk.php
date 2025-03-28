@@ -20,6 +20,9 @@ class Zendesk
             'auth' => ["$email/token", $apiToken],
             'timeout' => 30,
             'connect_timeout' => 5,
+            'headers' => [
+                "Content-Type" => "application/json",
+            ]
         ]);
     }
 
@@ -31,7 +34,7 @@ class Zendesk
     public function getTickets($page = 1)
     {
         try {
-            $response = $this->client->get("tickets.json?page=$page");
+            $response = $this->client->get("tickets", ["page"=>$page]);
             $data = json_decode($response->getBody()->getContents(), true);
             foreach ($data['tickets'] as &$ticket) {
 
@@ -57,19 +60,17 @@ class Zendesk
             return [];
         }
     }
+    public function organisationList(){
+        $response = $this->client->get("organizations.json");
+        $data = json_decode($response->getBody()->getContents(), true);
+        return $data['organizations'];
+    }
 
     public function fieldInfo($fieldId)
     {
 
         $response = $this->client->get("ticket_fields/$fieldId.json");
         $data = json_decode($response->getBody()->getContents(), true);
-//        $response = [
-//            "type" => $data['ticket_field']['type'],
-//            "title" => $data['ticket_field']['title'],
-//
-//        ];
-//
-//        return $response;
         return $data;
     }
 
@@ -97,5 +98,62 @@ class Zendesk
         }
         return $responce;
     }
+
+    public function mapFieldType($zendeskField){
+        if($zendeskField['type'] == 'tagger'){
+            $result = "custom_dropdown";
+        }elseif($zendeskField['type'] == 'checkbox'){
+            $result = "custom_checkbox";
+        }elseif($zendeskField['type'] == 'text'){
+            $result = "custom_text";
+        }elseif($zendeskField['type'] == 'date'){
+            $result = "custom_date";
+        }
+        return $result;
+    }
+public function mapSelectValues($ticketZendeskField)
+{
+    if($ticketZendeskField['value'] == 'delivery'){
+        $result = "Delivery1";
+    }  elseif($ticketZendeskField['value'] == 'order'){
+    $result = "Order1";
+    }elseif($ticketZendeskField['value'] == 'other'){
+        $result = "Other1";
+    }
+
+    return $result;
+
+}
+public function mapUser($userId){
+    $response = $this->client->get("users/$userId.json");
+    $data = json_decode($response->getBody()->getContents(), true);
+    return $data['user'];
+
+    //	"name": "The Customer",
+    //		"email": "customer@example.com",
+//    		"organization_id": null,
+}
+public function mapOrganisation($organisationId){
+//        if($organisationId == 25594811442578){
+//            $result = 203000296430; //relokia
+//        }else{
+//            $result = null;
+//        }
+//        return $result;
+    $response = $this->client->get("organizations/$organisationId.json");
+    $data = json_decode($response->getBody()->getContents(), true);
+    return $data['organization'];
+
+}
+    public function getField($ticket){
+        $zendeskFields = [];
+        foreach ($ticket['custom_fields'] as $field) {
+            $zendeskFields[] = $this->fieldInfo($field['id'])['ticket_field'];
+        }
+        return $zendeskFields;
+
+    }
+
+
 
 }

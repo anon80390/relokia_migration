@@ -17,12 +17,8 @@ foreach ($zendeskTickets as $ticket) { //ticket
     $priority = $zendesk->mapPriority($ticket['ticket']);
     $status = $zendesk->mapStatus($ticket['ticket']);
 
-    $ticketNamesUsers = array_column($ticket['users'], 'name', 'id');
-    $requesterName = $ticketNamesUsers[$ticket['ticket']['requester_id']];
-
-    $ticketEmailsUsers = array_column($ticket['users'], 'email', 'id');
-    $requesterEmail = $ticketEmailsUsers[$ticket['ticket']['requester_id']];
-
+    $ticketUsers = array_column($ticket['users'], null, 'id');
+    $requester = $ticketUsers[$ticket['ticket']['requester_id']];
 
     if($ticket['ticket']['organization_id'] != null){
         $zendeskUserCompany = $zendesk->mapOrganisation($ticket['organization_id'])['name'];
@@ -31,8 +27,8 @@ foreach ($zendeskTickets as $ticket) { //ticket
     }
 
     $freshdeskUserData = [
-        'name' => $requesterName,
-        'email' => $requesterEmail,
+        'name' => $requester['name'],
+        'email' => $requester['email'],
     ];
 
     $freshdeskUser = $freshdesk->createUser($freshdeskUserData, $zendeskUserCompany);
@@ -70,7 +66,7 @@ foreach ($zendeskTickets as $ticket) { //ticket
     $ticketData = [
         "description" => $ticket['ticket']['description'],
         "subject" => $ticket['ticket']['subject'],
-        "email" => $requesterEmail,
+        "email" => $requester['email'],
         "priority" => $priority,
         "status" => $status,
         "cc_emails" => $ticket['ticket']['cc_email'] ?? [],

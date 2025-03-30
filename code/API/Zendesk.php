@@ -1,147 +1,103 @@
 <?php
 
 namespace API;
-use GuzzleHttp\Client;
 class Zendesk
 {
-    public $client;
-    public $subdomain;
-    public $apiToken;
-    public $email;
-
+    private ApiClient $ApiClient;
     public function __construct($subdomain, $email, $apiToken)
     {
-        $this->subdomain = $subdomain;
-        $this->email = $email;
-        $this->apiToken = $apiToken;
-
-        $this->client = new Client([
-            'base_uri' => "https://$subdomain.zendesk.com/api/v2/",
-            'auth' => ["$email/token", $apiToken],
-            'timeout' => 30,
-            'connect_timeout' => 5,
-            'headers' => [
-                "Content-Type" => "application/json",
-            ]
-        ]);
-    }
-
-    public function getClient()
-    {
-        return $this->client;
+        $this->ApiClient = new ApiClient($subdomain, $email, $apiToken);
     }
 
     public function getTickets($page = 1)
     {
-        try {
-            $response = $this->client->get("tickets", ["page"=>$page]);
-            $data = json_decode($response->getBody()->getContents(), true);
-            foreach ($data['tickets'] as &$ticket) {
-
-                $comments = $this->client->get("tickets/{$ticket['id']}/comments.json");
-                $commentsData = json_decode($comments->getBody()->getContents(), true);
-
-                $assignee = $this->client->get("users/{$ticket['assignee_id']}.json");
-                $assigneeData = json_decode($assignee->getBody()->getContents(), true);
-
-                $requester = $this->client->get("users/{$ticket['requester_id']}.json");
-                $requesterData = json_decode($requester->getBody()->getContents(), true);
-
+            $ticketsInfo = $this->ApiClient->guzzleQuery("GET","tickets", ["page"=>$page]);
+            foreach ($ticketsInfo['tickets'] as &$ticket) {
+                $ticket = $this->ApiClient->guzzleQuery("GET","tickets/".$ticket['id'], ["include"=>'users']);
+                $commentsData = $this->ApiClient->guzzleQuery("GET", "tickets/{$ticket['ticket']['id']}/comments.json");
                 $ticket['comments'] = $commentsData;
-                $ticket['assignee'] = $assigneeData;
-                $ticket['requester'] = $requesterData;
 
             }
 
-            return $data['tickets'];
-
-        } catch (\Exception $e) {
-            echo "Error fetching tickets: " . $e->getMessage();
-            return [];
-        }
+            return $ticketsInfo['tickets'];
     }
     public function organisationList(){
-        $response = $this->client->get("organizations.json");
-        $data = json_decode($response->getBody()->getContents(), true);
+        $data = $this->ApiClient->guzzleQuery("GET", "organizations");
         return $data['organizations'];
     }
 
     public function fieldInfo($fieldId)
     {
-
-        $response = $this->client->get("ticket_fields/$fieldId.json");
-        $data = json_decode($response->getBody()->getContents(), true);
+        $data = $this->ApiClient->guzzleQuery("GET", "ticket_fields/$fieldId");
         return $data;
     }
 
     public function mapPriority($ticket)
     {
-        if($ticket['priority'] == 'low'){
-            $responce = 1;
-        }else if($ticket['priority'] == 'normal'){
-            $responce= 2;
-        }else if($ticket['priority'] == 'high'){
-            $responce = 3;
-        }else if($ticket['priority'] == 'urgent'){
-            $responce = 4;
+        switch($ticket['priority']){
+            case 'low':
+                return 1;
+                case 'normal':
+                    return 2;
+                    case 'high':
+                        return 3;
+                        case 'urgent':
+                            return 4;
+                            default:
+                                return null;
         }
-        return $responce;
     }
 
     public function mapStatus($ticket){
-        if($ticket['status'] == 'open'){
-            $responce = 2;
-        }elseif($ticket['status'] == 'pending'){
-            $responce = 3;
-        }else if($ticket['status'] == 'solved'){
-            $responce = 4;
+        switch ($ticket['status']) {
+            case 'open':
+                return 2;
+                case 'pending':
+                    return 3;
+                    case 'solved':
+                        return 4;
+                        default:
+                            return null;
         }
-        return $responce;
     }
 
     public function mapFieldType($zendeskField){
-        if($zendeskField['type'] == 'tagger'){
-            $result = "custom_dropdown";
-        }elseif($zendeskField['type'] == 'checkbox'){
-            $result = "custom_checkbox";
-        }elseif($zendeskField['type'] == 'text'){
-            $result = "custom_text";
-        }elseif($zendeskField['type'] == 'date'){
-            $result = "custom_date";
+
+        switch ($zendeskField['type']) {
+            case 'text':
+                return "custom_text";
+                case 'date':
+                    return "custom_date";
+                    case 'checkbox':
+                        return "custom_checkbox";
+                        case 'tagger':
+                            return "custom_dropdown";
+                            default:
+                                return null;
         }
-        return $result;
     }
 public function mapSelectValues($ticketZendeskField)
 {
-    if($ticketZendeskField['value'] == 'delivery'){
-        $result = "Delivery1";
-    }  elseif($ticketZendeskField['value'] == 'order'){
-    $result = "Order1";
-    }elseif($ticketZendeskField['value'] == 'other'){
-        $result = "Other1";
-    }
 
-    return $result;
+    switch ($ticketZendeskField['value']) {
+        case 'delivery':
+            return "Delivery1";
+            case 'order':
+                return "Order1";
+                case 'other':
+                    return "Other1";
+                    default:
+                        return null;
+    }
 
 }
 public function mapUser($userId){
-    $response = $this->client->get("users/$userId.json");
-    $data = json_decode($response->getBody()->getContents(), true);
+    $data = $this->ApiClient->guzzleQuery("GET", "users/$userId");
     return $data['user'];
-
-    //	"name": "The Customer",
-    //		"email": "customer@example.com",
-//    		"organization_id": null,
 }
 public function mapOrganisation($organisationId){
-//        if($organisationId == 25594811442578){
-//            $result = 203000296430; //relokia
-//        }else{
-//            $result = null;
-//        }
-//        return $result;
-    $response = $this->client->get("organizations/$organisationId.json");
-    $data = json_decode($response->getBody()->getContents(), true);
+
+    $data = $this->ApiClient->guzzleQuery("GET", "organizations/$organisationId");
     return $data['organization'];
 
 }

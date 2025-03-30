@@ -2,7 +2,7 @@
 
 namespace API;
 use GuzzleHttp\Client;
-
+use GuzzleHttp\Exception\RequestException;
 
 class Freshdesk
 {
@@ -87,7 +87,7 @@ class Freshdesk
     public function searchContact($email){
         $response = $this->client->get("contacts/autocomplete?term=$email");
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['id'];
+        return $data[0]['id']; //data вертає вкладені масиви
     }
     public function searchCompany($companyName){
         $response = $this->client->get("companies/autocomplete?name=$companyName");
@@ -103,13 +103,15 @@ class Freshdesk
                 $companyId = $this->crateCompany($companyName);
                 $userData['company_id'] = $companyId;
             }else{
-                $userData['company_id'] = $this->searchCompany($companyName);
+                $userData['company_id'] = null;
             }
 
             $response = $this->client->post("contacts/", $this->queryBody );
 
             $data = json_decode($response->getBody()->getContents(), true);
             return $data;
+        }else{
+            return $this->searchContact($userData['email']);
         }
 
 

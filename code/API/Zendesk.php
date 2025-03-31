@@ -3,7 +3,7 @@
 namespace API;
 class Zendesk
 {
-    private ApiClient $ApiClient;
+    private $ApiClient;
     public function __construct($subdomain, $email, $apiToken)
     {
         $this->ApiClient = new ApiClient($subdomain, $email, $apiToken);
@@ -91,6 +91,29 @@ public function mapSelectValues($ticketZendeskField)
     }
 
 }
+
+public function mapGroup($groupId){
+        switch ($groupId) {
+            case 33728684707601:
+                return 203000091151; //support
+                case 33733257031953:
+                    return 203000090776; //finance
+            default:
+                return null;
+
+        }
+}
+
+    public function mapAgent($agentId){
+        switch ($agentId) {
+            case 33728697582353:
+                return 203004425114; //v.tylnyi@relokia.com
+            default:
+                return null;
+
+        }
+    }
+
 public function mapUser($userId){
     $data = $this->ApiClient->guzzleQuery("GET", "users/$userId");
     return $data['user'];

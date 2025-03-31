@@ -11,9 +11,9 @@ public $zendeskSubdomain;
     public $freshdeskToken;
 
 public function __construct(){
-    $this->zendeskSubdomain = 'relokia1396';
+    $this->zendeskSubdomain = 'relokia4065';
     $this->zendeskEmail = 'v.tylnyi@relokia.com';
-    $this->zendeskApiToken = 'AD8iVJSZK0e7SYeJm743OPoWXfvyIoI5opEhQLUK';
+    $this->zendeskApiToken = 'PpdtFPzA7D5IrlJqwb2hsbwDxglT4aM7SzMoEWBZ';
 
     $this->freshdeskSubdomain = 'relokia-support';
     $this->freshdeskToken = 'EEMTALdkVEQSrsKq2VJ';

@@ -7,7 +7,7 @@ use API\Config;
 
 $config = new Config();
 
-$freshdesk = new Freshdesk($config->freshdeskToken, $config->freshdeskSubdomain);
+$freshdesk = new Freshdesk($config->freshdeskSubdomain, $config->freshdeskToken);
 $zendesk = new Zendesk($config->zendeskSubdomain, $config->zendeskEmail, $config->zendeskApiToken);
 
 $zendeskTickets = $zendesk->getTickets();
@@ -21,7 +21,7 @@ foreach ($zendeskTickets as $ticket) { //ticket
     $requester = $ticketUsers[$ticket['ticket']['requester_id']];
 
     if($ticket['ticket']['organization_id'] != null){
-        $zendeskUserCompany = $zendesk->mapOrganisation($ticket['organization_id'])['name'];
+        $zendeskUserCompany = $zendesk->mapOrganisation($ticket['ticket']['organization_id'])['name'];
     }else{
         $zendeskUserCompany = null;
     }
@@ -63,6 +63,8 @@ foreach ($zendeskTickets as $ticket) { //ticket
         }
     }
 
+    $groupId = $zendesk->mapGroup($ticket['ticket']['group_id']);
+    $agentId = $zendesk->mapAgent($ticket['ticket']['assignee_id']);
     $ticketData = [
         "description" => $ticket['ticket']['description'],
         "subject" => $ticket['ticket']['subject'],
@@ -71,14 +73,36 @@ foreach ($zendeskTickets as $ticket) { //ticket
         "status" => $status,
         "cc_emails" => $ticket['ticket']['cc_email'] ?? [],
         "custom_fields" => $custom_fields,
-        "company_id" => $zendesk->mapOrganisation($ticket['ticket']['organization_id']),
-        //organization_id
+        "company_id" => $freshdeskUser['company_id'],
+        "group_id" => $groupId,
+        "responder_id" => $agentId
     ];
 
     $ticketId = $freshdesk->crateTicket($ticketData);
-
+    unset($ticket['comments']['comments'][0]);
     foreach ($ticket['comments']['comments'] as $comment) {
-        $freshdesk->setReply($ticketId['id'], $comment['body']);
+        if(array_key_exists("body", $comment)){
+
+          $zendeskAuthor = $ticketUsers[$comment['author_id']];
+
+            $queryParams = [
+                'body' => $comment['body'],
+//                'from_email' => $zendeskAuthor['email']
+            ];
+
+            if($comment['public'] == true){
+                $freshdesk->setReply($ticketId['id'], $queryParams);
+            }else{
+//                unset($queryParams['user_id']);
+                $queryParams['private'] = true;
+//                $queryParams['notify_emails'] =  ;
+                $freshdesk->setNote($ticketId['id'], $queryParams);
+
+            }
+
+
+        }
+
     }
 
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace API;
+namespace API\FD;
 
 class Freshdesk
 {
@@ -13,12 +13,28 @@ class Freshdesk
     }
 
 
-
+    public function downloadAttachment($url){
+        $urlArray = explode('.', $url);
+        $fileType = end($urlArray);
+        $path = "./attachments/attachment_".rand(100000, 999999).'.'.$fileType;
+        $attachment = file_get_contents($url);
+        file_put_contents($path, $attachment);
+        return $path;
+    }
     public function setNote(int $ticketId, $queryParams)
     {
-
+    if($queryParams[0]['name'] == 'attachments[]'){
+        $this->ApiClientFD->guzzleQuery("POST","tickets/$ticketId/notes", [], $queryParams);
+    }else{
         $this->ApiClientFD->guzzleQuery("POST","tickets/$ticketId/notes", $queryParams);
+    }
 
+
+    }
+    public function setReplyToForward(int $ticketId, $queryParams)
+    {
+
+        $this->ApiClientFD->guzzleQuery("POST","tickets/$ticketId/reply_to_forward", $queryParams);
 
     }
 
@@ -38,7 +54,7 @@ class Freshdesk
 
         return [
             "id" => $data['id'],
-            "custom_fields" => $data['custom_fields'],
+//            "custom_fields" => $data['custom_fields'],
         ];
 
 
@@ -56,9 +72,11 @@ class Freshdesk
     }
     public function searchContact($email){
 
-        $data = $this->ApiClientFD->guzzleQuery("GET", "contacts/autocomplete", ["term"=>$email]);
+        $data = $this->ApiClientFD->guzzleQuery("GET", "search/contacts?query", ["query"=>'"email:\''.$email.'\'"']);
+        $contacts = array_column($data['results'], null, 'email');
+
         return [
-            "id" => $data[0]['id'],
+            "id" => $contacts[$email]['id'],
 
         ];
     }

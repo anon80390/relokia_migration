@@ -1,9 +1,9 @@
 <?php
 include __DIR__ . '/vendor/autoload.php';
 
-use API\Zendesk;
-use API\Freshdesk;
 use API\Config;
+use API\FD\Freshdesk;
+use API\ZD\Zendesk;
 
 $config = new Config();
 
@@ -14,14 +14,14 @@ $zendeskTickets = $zendesk->getTickets();
 
 foreach ($zendeskTickets as $ticket) { //ticket
 
-    $priority = $zendesk->mapPriority($ticket['ticket']);
-    $status = $zendesk->mapStatus($ticket['ticket']);
+    $priority = $zendesk->Mapping->mapPriority($ticket['ticket']);
+    $status = $zendesk->Mapping->mapStatus($ticket['ticket']);
 
     $ticketUsers = array_column($ticket['users'], null, 'id');
     $requester = $ticketUsers[$ticket['ticket']['requester_id']];
 
     if($ticket['ticket']['organization_id'] != null){
-        $zendeskUserCompany = $zendesk->mapOrganisation($ticket['ticket']['organization_id'])['name'];
+        $zendeskUserCompany = $zendesk->Mapping->mapOrganisation($ticket['ticket']['organization_id'])['name']; //organisation
     }else{
         $zendeskUserCompany = null;
     }
@@ -31,7 +31,7 @@ foreach ($zendeskTickets as $ticket) { //ticket
         'email' => $requester['email'],
     ];
 
-    $freshdeskUser = $freshdesk->createUser($freshdeskUserData, $zendeskUserCompany);
+    $freshdeskUser = $freshdesk->createUser($freshdeskUserData, $zendeskUserCompany ?? null);
 
     $zendeskFields = $zendesk->getField($ticket['ticket']);
 
@@ -47,12 +47,12 @@ foreach ($zendeskTickets as $ticket) { //ticket
                     if ($ticketZendeskField['id'] == $zendeskField['id']) {
 
 
-                        if ($zendesk->mapFieldType($zendeskField) == "custom_dropdown") {
-                            $value = $zendesk->mapSelectValues($ticketZendeskField);
+                        if ($zendesk->Mapping->mapFieldType($zendeskField) == "custom_dropdown") {
+                            $value = $zendesk->Mapping->mapSelectValues($ticketZendeskField);
                         }else{
                             $value = $ticketZendeskField['value'];
                         }
-                        if($zendesk->mapFieldType($zendeskField) == "custom_text" && $ticketZendeskField['value'] == null){
+                        if($zendesk->Mapping->mapFieldType($zendeskField) == "custom_text" && $ticketZendeskField['value'] == null){
                             $value = "";
                         }
 
@@ -63,12 +63,13 @@ foreach ($zendeskTickets as $ticket) { //ticket
         }
     }
 
-    $groupId = $zendesk->mapGroup($ticket['ticket']['group_id']);
-    $agentId = $zendesk->mapAgent($ticket['ticket']['assignee_id']);
+    $groupId = $zendesk->Mapping->mapGroup($ticket['ticket']['group_id']);
+    $agentId = $zendesk->Mapping->mapAgent($ticket['ticket']['assignee_id']);
+
     $ticketData = [
         "description" => $ticket['ticket']['description'],
         "subject" => $ticket['ticket']['subject'],
-        "email" => $requester['email'],
+        "requester_id" => $freshdeskUser['id'],
         "priority" => $priority,
         "status" => $status,
         "cc_emails" => $ticket['ticket']['cc_email'] ?? [],
@@ -80,22 +81,27 @@ foreach ($zendeskTickets as $ticket) { //ticket
 
     $ticketId = $freshdesk->crateTicket($ticketData);
     unset($ticket['comments']['comments'][0]);
+
+
     foreach ($ticket['comments']['comments'] as $comment) {
+        if($comment['attachments']){
+            $freshdeskAttachment = [];
+            foreach ($comment['attachments'] as $attachment) {
+               $freshdeskAttachment[] = fopen($attachment['content_url'], 'r');
+            }
+        }
         if(array_key_exists("body", $comment)){
 
           $zendeskAuthor = $ticketUsers[$comment['author_id']];
+          $zendeskEmail = $zendeskAuthor['email'];
 
             $queryParams = [
                 'body' => $comment['body'],
-//                'from_email' => $zendeskAuthor['email']
+                'private' => !$comment['public'],
+                'user_id' => $freshdesk->searchContact($zendeskEmail)['id'] ?? $agentId,
+                'attachments' => $freshdeskAttachment ?? []
             ];
 
-            if($comment['public'] == true){
-                $freshdesk->setReply($ticketId['id'], $queryParams);
-            }else{
-//                unset($queryParams['user_id']);
-                $queryParams['private'] = true;
-//                $queryParams['notify_emails'] =  ;
                 $freshdesk->setNote($ticketId['id'], $queryParams);
 
             }
@@ -103,7 +109,7 @@ foreach ($zendeskTickets as $ticket) { //ticket
 
         }
 
-    }
+
 
 
 

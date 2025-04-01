@@ -1,7 +1,8 @@
 <?php
 
-namespace API;
+namespace API\ZD;
 use GuzzleHttp\Client;
+
 class ApiClient
 {
 private $client;
